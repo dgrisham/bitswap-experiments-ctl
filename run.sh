@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 usage="\
-usage: run.sh [-h] -d FILESIZE -u [UPLOAD_RATES [UPLOAD_RATES ...]]
+usage: run.sh [-h] -d FILESIZE -u [UPLOAD_RATE [UPLOAD_RATE ...]]
               -r ROUND_BURST [-k {sim,exp,both}]"
 
 srcdir="$(dirname $(readlink -f $0))"
@@ -9,7 +9,7 @@ simdir="$SRC/strategy-sim"
 expdir="$SRC/bitswap-tests"
 
 kind='both'
-while getopts "hd:u:r:k:" opt; do
+while getopts "d:u:r:k:h" opt; do
     case $opt in
         d)
             data="$OPTARG"
@@ -39,7 +39,7 @@ done
 shift $((OPTIND-1))
 
 if [[ -z "${data}" || -z "${upload[@]}" || -z "${round_burst[@]}" ]]; then
-    echo "missing required arg" >&2
+    echo "missing required argument(s)" >&2
     echo "$usage" >&2
     exit 1
 fi
@@ -62,8 +62,7 @@ if [[ "$kind" == 'exp' || "$kind" == 'both' ]]; then
         -t 2 \
         -n 3 \
         -s "identity" \
-        -f "head \
-        -c $data /dev/urandom" \
+        -f "head -c $data /dev/urandom" \
         -b "${upload[*]}" \
         -r "${round_burst[*]}" \
         -d "$srcdir/results/exp" \
