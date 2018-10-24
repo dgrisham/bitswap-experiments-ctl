@@ -1,27 +1,34 @@
 #!/usr/bin/env bash
 
+usage="\
+usage: run.sh [-h] -d FILESIZE -u [UPLOAD_RATES [UPLOAD_RATES ...]]
+              -r ROUND_BURST [-k {sim,exp,both}]"
+
+srcdir="$(dirname $(readlink -f $0))"
 simdir="$SRC/strategy-sim"
 expdir="$SRC/bitswap-tests"
-while getopts "d:u:r:" opt; do
+
+kind='both'
+while getopts "hd:u:r:k:" opt; do
     case $opt in
         d)
-            [[ -z "$OPTARG" ]] && usage && exit 1
             data="$OPTARG"
             ;;
         u)
-            [[ -z "$OPTARG" ]] && usage && exit 1
             IFS=' ' read -r -a upload <<< "$OPTARG"
             ;;
         r)
-            [[ -z "$OPTARG" ]] && usage && exit 1
             IFS=' ' read -r -a round_burst <<< "$OPTARG"
             ;;
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
-            exit 1
+        k)
+            kind="$OPTARG"
             ;;
-        :)
-            echo "Option -$OPTARG requires and argument." >&2
+        h)
+            echo "$usage"
+            exit 0
+            ;;
+        *)
+            echo "$usage" >&2
             exit 1
             ;;
         --)
@@ -31,12 +38,39 @@ while getopts "d:u:r:" opt; do
 done
 shift $((OPTIND-1))
 
-cd "$simdir"
-pipenv run main --data "$data" -u ${upload[*]} --dpr ${round_burst[*]} --outdir "$srcdir/results/sim"
+if [[ -z "${data}" || -z "${upload[@]}" || -z "${round_burst[@]}" ]]; then
+    echo "missing required arg" >&2
+    echo "$usage" >&2
+    exit 1
+fi
 
-cd "$srcdir"
+if [[ "$kind" == 'sim' || "$kind" == 'both' ]]; then
+    cd "$simdir"
+    echo "running simulation..."
+    pipenv run main \
+        --data "$data" \
+        -u ${upload[*]} \
+        --dpr ${round_burst[*]} \
+        --outdir "$srcdir/results/sim" &
+    cd "$srcdir"
+fi
 
-# wenv cd bitswap-tests
-# pipenv run main 
+if [[ "$kind" == 'exp' || "$kind" == 'both' ]]; then
+    cd "$expdir"
+    echo "running experiment..."
+    outfile=$(./test.sh \
+        -t 2 \
+        -n 3 \
+        -s "identity" \
+        -f "head \
+        -c $data /dev/urandom" \
+        -b "${upload[*]}" \
+        -r "${round_burst[*]}" \
+        -d "$srcdir/results/exp" \
+      | grep -oP "Saved results to: \K.*?$")
 
-# cd "$srcdir"
+    cd plot
+    pipenv run main "$outfile" &
+
+    cd "$srcdir"
+fi
